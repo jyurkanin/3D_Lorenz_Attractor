@@ -82,11 +82,12 @@ ProjectedPoints project_point(Vector3f point_v, Vector3f view_v){
     pp.phi_l = atan2f(point.z - view.z, point.x - view.x);
     pp.phi_r = atan2f(point.z - view.z, point.x - view.x);
 
+    /*
     pp.xl = FOCAL_LEN*(point.x - view.x)/(point.y - view.y);
     pp.yl = FOCAL_LEN*(point.z - view.z)/(point.y - view.y);
     pp.xr = FOCAL_LEN*(point.x - view.x - STEREO_DISPARITY)/(point.y - view.y);
     pp.yr = FOCAL_LEN*(point.z - view.z)/(point.y - view.y);
-    
+    */
     return pp;
 }
 
@@ -191,9 +192,9 @@ int rainbow(int c){
 }
 
 void lorenz_ode(float *X, float *Xd){
-    float sigma = 19;
-    float beta = 2;
-    float row = 38;
+    float sigma = 10;
+    float beta = 8/3;
+    float row = 22;
     
     Xd[0] = sigma*(X[1]-X[0]);
     Xd[1] = X[0]*(row-X[2])-X[1];
@@ -223,17 +224,18 @@ void* window_thread(void*){
 
     float num = .07;
     
-    Vector3f d(2,0,0);
+    Vector3f d(3,0,0);
     
     float X[3] = {10,.1,.2};
     float new_X[3];
 
     Matrix3f rot = get_rotation(0,0,0);
-    Matrix3f i_rot = get_rotation(0,0,.1);
+    Matrix3f i_rot = get_rotation(0,0,.002);
     
     std::deque<Vector3f> lines;     
 
-    for(int j = 0; j < 1000; j++){
+    for(int j = 0; j < 10000; j++){
+//        d[0] += .08;
         rot = rot*i_rot;
         XSetForeground(dpy, gc, 0);
         XFillRectangle(dpy, w, gc, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -242,16 +244,16 @@ void* window_thread(void*){
             lines.push_back(Vector3f(new_X)); //create new vector3f from array
             memcpy(X, new_X, 3*sizeof(float));
             
-            if(lines.size() > 1000){
+            if(lines.size() > 300){
                 lines.pop_front();
             }
             
-            XSetForeground(dpy, gc, rainbow(64));
+            XSetForeground(dpy, gc, rainbow(8));
             for(int k = 1; k < lines.size(); k++){
                 draw_stereo_line((rot*lines[k-1]*num)+d, (rot*lines[k]*num)+d);
             }
             XFlush(dpy);
-            usleep(10);
+//            usleep(10);
         }
     }
     return 0;
