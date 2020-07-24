@@ -15,7 +15,7 @@
 
 
 #define SCREEN_WIDTH 1920
-#define SCREEN_HEIGHT 1080
+#define SCREEN_HEIGHT 1024
 #define STEREO_DISPARITY .068 //milimeters.
 #define FOCAL_LEN .05 //5cm idk bruh
 
@@ -28,7 +28,7 @@ Window w;
 GC gc;
 
 pthread_t w_thread;
-int is_window_alive;
+volatile int is_window_alive;
 
 typedef struct {
     int xl, yl, xr, yr;
@@ -201,6 +201,42 @@ void lorenz_ode(float *X, float *Xd){
     Xd[2] = X[0]*X[1]-beta*X[2];
 }
 
+void rossler_ode(float *X, float *Xd){
+    float a = .1;
+    float b = .1;
+    float c = 14;
+    
+    Xd[0] = -X[1]-X[2];
+    Xd[1] = X[0] + a*X[1];
+    Xd[2] = b + X[2]*(X[0]-c);
+}
+
+void chua_ode(float *X, float *Xd){
+    float m0 = -1.143;
+    float m1 = -.714;
+    float alpha = 15.6;
+    float beta = 28;
+
+    float h = m1*X[0]+0.5*(m0-m1)*(fabs(X[0]+1)-fabs(X[0]-1));
+
+    Xd[0] = alpha*(X[1]-X[0]-h);
+    Xd[1] = X[0]-X[1]+X[2];
+    Xd[2] = -beta*X[1];
+}
+
+void thomas_ode(float *X, float *Xd){
+    float b = .2;
+    Xd[0] = sinf(X[1]) - b*X[0];
+    Xd[1] = sinf(X[2]) - b*X[1];
+    Xd[2] = sinf(X[0]) - b*X[2];
+}
+
+void arneodo_ode(float *X, float *Xd){
+    Xd[0] = X[1];
+    Xd[1] = X[2];
+    Xd[2] = 5.5*X[0] - 3.5*X[1] - X[2] - (X[0]*X[0]*X[0]);
+}
+
 void runge_kutta(float *X, float *Xt1, void (ode)(float*,float*), float ts, int len){
     float temp[3];
     float k1[3]; ode(X, k1); //Calculate derivative.
@@ -219,46 +255,73 @@ void runge_kutta(float *X, float *Xt1, void (ode)(float*,float*), float ts, int 
     }
 }
 
-void* window_thread(void*){
-    XSetForeground(dpy, gc, 0xFF);
-
-    float num = .07;
+void plot_rotating(){
+    float num = .2;
+    Vector3f d(1,0,0);
     
-    Vector3f d(3,0,0);
-    
-    float X[3] = {10,.1,.2};
+    float X[3] = {.3,0,0};
     float new_X[3];
 
-    Matrix3f rot = get_rotation(0,0,0);
-    Matrix3f i_rot = get_rotation(0,0,.002);
+    Matrix3f rot = get_rotation(0,-.3,0);
+    Matrix3f i_rot = get_rotation(0,0,.01);
     
-    std::deque<Vector3f> lines;     
+    std::deque<Vector3f> lines;
 
+    int first_different = 2000;
     for(int j = 0; j < 10000; j++){
 //        d[0] += .08;
         rot = rot*i_rot;
-        XSetForeground(dpy, gc, 0);
-        XFillRectangle(dpy, w, gc, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        for(int i = 0; i < 10; i++){
-            runge_kutta(X, new_X, lorenz_ode, .01, 3);
+//        XSetForeground(dpy, gc, 0);
+//        XFillRectangle(dpy, w, gc, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        XClearWindow(dpy, w);
+        if(j == 1) first_different = 10;
+        for(int i = 0; i < first_different; i++){
+            runge_kutta(X, new_X, thomas_ode, .1, 3);
             lines.push_back(Vector3f(new_X)); //create new vector3f from array
             memcpy(X, new_X, 3*sizeof(float));
             
-            if(lines.size() > 300){
+            if(lines.size() > 2000){
                 lines.pop_front();
             }
-            
-            XSetForeground(dpy, gc, rainbow(8));
+
+//            XSetForeground(dpy, gc, rainbow(16));
             for(int k = 1; k < lines.size(); k++){
-                draw_stereo_line((rot*lines[k-1]*num)+d, (rot*lines[k]*num)+d);
+                Vector3f temp = (rot*lines[k-1]*num)+d;
+                XSetForeground(dpy, gc, fmax(0,0xFF*(1-(temp.dot(temp)/5))));
+                draw_stereo_line(temp, (rot*lines[k]*num)+d);
             }
-            XFlush(dpy);
-//            usleep(10);
         }
+//        XFlush(dpy);
     }
-    return 0;
+    printf("brotal recall\n");
+    is_window_alive = 0;
 }
 
+void plot_static(){
+    float num = .07;
+    Vector3f d(.3,0,0);
+    
+    float X[3] = {.7,0,0};
+    float new_X[3];
+
+    
+    std::deque<Vector3f> lines;     
+
+    for(int j = 0; j < 100000; j++){
+        runge_kutta(X, new_X, chua_ode, .01, 3);
+                
+        XSetForeground(dpy, gc, rainbow(8));
+        draw_stereo_line((Vector3f(X)*num)+d, (Vector3f(new_X)*num)+d);
+        memcpy(X, new_X, 3*sizeof(float));
+        XFlush(dpy);
+        usleep(1000);
+    }
+}
+
+void* window_thread(void*){
+    plot_rotating();
+    return 0;
+}
 
 void init_window(){
     dpy = XOpenDisplay(":0.0");
@@ -287,7 +350,6 @@ void init_window(){
 void del_window(){
     XDestroyWindow(dpy, w);
     XCloseDisplay(dpy);
-    is_window_alive = 0;
     return;
 }
 
@@ -298,6 +360,10 @@ int main(){
     while(is_window_alive){
         
     }
+    printf("bromine\n");
+    pthread_join(w_thread, 0);
+    printf("broseph stalin\n");
     del_window();
+    printf("brotato chip\n");
     
 }

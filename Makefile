@@ -1,6 +1,6 @@
 
 
-CFLAGS= -g -D__LINUX_ASLA -Wall
+CFLAGS= -O3 -D__LINUX_ASLA -Wall
 LIBS= -lm -lpthread -lasound -lX11
 
 all:
